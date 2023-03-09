@@ -1,7 +1,6 @@
 package com.example.dreamgames.Repository;
 
 import com.example.dreamgames.Model.Team;
-import com.example.dreamgames.Model.User;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 

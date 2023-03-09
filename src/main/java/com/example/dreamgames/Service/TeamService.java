@@ -1,25 +1,32 @@
 package com.example.dreamgames.Service;
 
 import com.example.dreamgames.Exception.NotEnoughCoinsException;
+import com.example.dreamgames.Model.JoinTeamRequest;
 import com.example.dreamgames.Model.Team;
 import com.example.dreamgames.Exception.TeamFullException;
 import com.example.dreamgames.Model.User;
 import com.example.dreamgames.Repository.TeamRepository;
 import com.example.dreamgames.Repository.UserRepository;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.server.ResponseStatusException;
 
-import java.util.Collections;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.stream.Collectors;
 
 @Service
 public class TeamService {
-    @Autowired
-    private TeamRepository teamRepository;
 
-    @Autowired
-    private UserRepository userRepository;
+    private final TeamRepository teamRepository;
+
+    private final UserRepository userRepository;
+
+    public TeamService(TeamRepository teamRepository, UserRepository userRepository) {
+        this.teamRepository = teamRepository;
+        this.userRepository = userRepository;
+    }
 
     public Team createTeam(String teamName, User user) throws NotEnoughCoinsException {
         if (user.getCoins() < 1000) {
@@ -35,23 +42,33 @@ public class TeamService {
         return teamRepository.save(team);
     }
 
-    public Team joinTeam(long teamId, User user) throws TeamFullException {
-        Optional<Team> optionalTeam = teamRepository.findById(teamId);
-        if (optionalTeam.isPresent()) {
-            Team team = optionalTeam.get();
-            if (team.isFull()) {
-                throw new TeamFullException("Team is Full");
-            }
-            if (team.addUser(user)) {
-                return teamRepository.save(team);
-            }
+    public Team joinTeam(long teamId, JoinTeamRequest request) throws TeamFullException {
+        Team team = teamRepository.findById(teamId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Team not found"));
+
+        User user = userRepository.findById(request.getUserId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+
+        if (team.getUsers().size() < 20) {
+            user.setTeam(team);
+            userRepository.save(user);
+        } else {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Team is full");
         }
-        return null;
+
+        return team;
     }
 
-    public List<Team> getTeamsWithEmptySlots() {
-        List<Team> teams = teamRepository.findByCapacityGreaterThanAndMembersIsNull(0);
-        Collections.shuffle(teams);
-        return teams.subList(0, Math.min(teams.size(), 10));
+
+    public List<Team> getRandomTeamsWithEmptySlot() {
+        List<Team> teamsWithEmptySlots = teamRepository.findByUsersSizeLessThan(20);
+        if (teamsWithEmptySlots.size() <= 10) {
+            return teamsWithEmptySlots;
+        } else {
+            return new ArrayList<>(new HashSet<>(teamsWithEmptySlots).stream()
+                    .sorted((t1, t2) -> ThreadLocalRandom.current().nextInt(-1, 2))
+                    .limit(10)
+                    .collect(Collectors.toList()));
+        }
     }
 }
